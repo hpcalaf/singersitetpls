@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the galerie module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function galerie_schema() {
+  return array(
+    'galerie' => array(
+      'description' => 'The base table for galeries',
+      'fields' => array(
+        'nid' => array(
+          'description' => 'The nid of the galerie node.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+        'type' => array(
+          'description' => 'The module that should handle this galerie.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+          'default' => 'galerie_directory',
+        ),
+      ),
+      'primary key' => array('nid'),
+      'foreign keys' => array('node' => 'nid'),
+    ),
+  );
+}
+

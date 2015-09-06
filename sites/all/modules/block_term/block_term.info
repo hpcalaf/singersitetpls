@@ -1,0 +1,13 @@
+name = Block Visibility by Term
+description = Control block visibility by taxonomy terms.
+core = 7.x
+dependencies[] = taxonomy
+configure = admin/config/system/block_term
+
+
+; Information added by drupal.org packaging script on 2012-08-29
+version = "7.x-1.0-alpha1+5-dev"
+core = "7.x"
+project = "block_term"
+datestamp = "1346198831"
+

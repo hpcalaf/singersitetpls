@@ -1,0 +1,93 @@
+<?php
+// $Id: wp_blog.install,v 1.1 2011/02/13 22:01:18 manarth Exp $
+
+/**
+ * @file
+ * Install functions for the WP Blog module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function wp_blog_install() {
+  // Include the module-file to load the constants.
+  require_once(dirname(__FILE__) . '/wp_blog.module');
+
+  $t = get_t();
+
+  // Add the body field to the WP Blog content type.
+  node_types_rebuild();
+  $types = node_type_get_types();
+  node_add_body_field($types[WP_BLOG_DEFAULT_CTYPE], $t('Body'));
+
+  // Add a taxonomy vocabulary.
+  _wp_blog_create_vocabulary();
+}
+
+/**
+ * Create the 'wp_blog_tags' vocabulary (if it doesn't already exist).
+ */
+function _wp_blog_create_vocabulary() {
+  $t = get_t();
+
+  // If we enable WP blog at the same time as taxonomy we need to call
+  // field_associate_fields() as otherwise the field won't be enabled until
+  // hook modules_enabled is called which takes place after hook_enable events.
+  field_associate_fields('taxonomy');
+
+  // Create the forum vocabulary if it does not exist.
+  $vocabulary = taxonomy_vocabulary_load(variable_get('wp_blog_vocabulary', 0));
+  if (!$vocabulary) {
+    $edit = array(
+      'name' => $t('Blog tags'),
+      'machine_name' => 'wp_blog_tags',
+      'description' => t('Tags to categorise blog posts'),
+      'hierarchy' => 1,
+      'module' => 'wp_blog',
+    );
+    $vocabulary = (object) $edit;
+    taxonomy_vocabulary_save($vocabulary);
+    variable_set('wp_blog_vocabulary', $vocabulary->vid);
+  }
+
+  // Create the 'taxonomy_wp_blog_tags' field if it doesn't already exist.
+  if (!field_info_field('taxonomy_wp_blog_tags')) {
+    $field = array(
+      'field_name' => 'taxonomy_' . $vocabulary->machine_name,
+      'type' => 'taxonomy_term_reference',
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => $vocabulary->machine_name,
+            'parent' => 0,
+          ),
+        ),
+      ),
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+    );
+    field_create_field($field);
+
+    // Create the instance on the bundle.
+    $instance = array(
+      'field_name' => 'taxonomy_' . $vocabulary->machine_name,
+      'entity_type' => 'node',
+      'label' => $vocabulary->name,
+      'bundle' => 'wp_blog',
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'taxonomy_autocomplete',
+      ),
+      'display' => array(
+        'default' => array(
+          'type' => 'taxonomy_term_reference_link',
+          'weight' => 10,
+        ),
+        'teaser' => array(
+          'type' => 'taxonomy_term_reference_link',
+          'weight' => 10,
+        ),
+      ),
+    );
+    field_create_instance($instance);
+  }
+}

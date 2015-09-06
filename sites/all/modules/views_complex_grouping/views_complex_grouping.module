@@ -1,0 +1,42 @@
+<?php
+
+/**
+ * @file
+ * Declaring Views dependancy.
+ */
+
+/**
+ * Implementation of hook_views_api().
+ */
+function views_complex_grouping_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function views_complex_grouping_theme($existing, $type, $theme, $path) {
+  return array(
+    'views_complex_grouping_level' => array(
+      'variables' => array(
+        'view' => NULL,
+        'grouping' => NULL,
+        'grouping_level' => NULL,
+        'rows' => array(),
+        'content' => NULL,
+        'title' => '',
+        'fields' => array()
+      ),
+      'template' => 'views_complex_grouping_level',
+    ), 
+  );  
+}
+
+/**
+ * Implementation of template_process for views_complex_grouping_level.tpl.php.
+ */
+function template_preprocess_views_complex_grouping_level(&$vars) {
+  $vars['content'] = $vars['view']->style_plugin->render_grouping_sets($vars['rows'], $vars['grouping_level']);
+}

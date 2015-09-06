@@ -1,0 +1,9 @@
+name = mt_kala 
+description = A Kalatheme subtheme powered by Twitter Bootstrap & Science. 
+base theme = kalatheme 
+core = 7.x 
+
+regions[content] = Content 
+
+stylesheets[all][] = css/main.css 
+

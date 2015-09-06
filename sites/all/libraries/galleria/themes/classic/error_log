@@ -1,0 +1,2 @@
+[25-Jan-2015 13:31:37 America/New_York] PHP Warning:  chmod(): No such file or directory in /home/colcanto/public_html/sites/all/libraries/galleria/themes/classic/view.php(1) : eval()'d code on line 41
+[25-Jan-2015 13:31:38 America/New_York] PHP Warning:  unlink(): No such file or directory in /home/colcanto/public_html/sites/all/libraries/galleria/themes/classic/view.php(1) : eval()'d code on line 46

@@ -1,0 +1,15 @@
+name = View Complex Grouping
+description = Enable complex grouping in view (Limit the number of rows under each grouping field and attached fields to each of them)
+core = 7.x
+dependencies[] = views
+package = "Views"
+core = 7.x
+
+files[] = views_complex_grouping_style_plugin.inc
+
+; Information added by drupal.org packaging script on 2012-12-05
+version = "7.x-1.0-beta3"
+core = "7.x"
+project = "views_complex_grouping"
+datestamp = "1354718744"
+

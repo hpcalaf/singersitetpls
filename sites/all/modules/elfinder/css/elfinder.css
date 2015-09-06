@@ -1,0 +1,7 @@
+// $Id: elfinder.css,v 1.1 2010/10/06 09:44:51 ph0enix Exp $
+
+.el-finder-nav ul li {
+	background:none;
+	padding:0;
+	margin:0;
+}

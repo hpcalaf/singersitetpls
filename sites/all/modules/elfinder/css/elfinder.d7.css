@@ -1,0 +1,10 @@
+/* $Id: elfinder.d7.css,v 1.1.2.1 2010/11/10 00:10:38 ph0enix Exp $ */
+
+.el-finder-nav ul {
+	list-style-type:none!important;  
+}
+
+.el-finder-cwd label {
+ font-weight:normal!important;
+ overflow:visible!important;
+}

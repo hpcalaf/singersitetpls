@@ -1,0 +1,640 @@
+<?php
+
+/**
+ * @file
+ * The core module that manages all common galerie operations
+ */
+
+/**
+ * Implements hook_galerie_types().
+ */
+function galerie_directory_galerie_types() {
+  return array(
+    'directory' => array(
+      'title' => t('Directory'),
+      'description' => t('A gallery based on the contents of a directory.'),
+      'module' => 'galerie_directory',
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_prepare().
+ * We need to add our javascript in the galerie form just in case our
+ * type is used. There might be better ways but this will do for now.
+ */
+function galerie_directory_node_prepare($node) {
+  if ($node->type == 'galerie') {
+    drupal_add_js(drupal_get_path('module', 'galerie_directory') . '/galerie_directory.js');
+  }
+}
+
+/**
+ * Implements hook_galerie_form().
+ */
+function galerie_directory_galerie_form($node, $form_state) {
+  $form = array(
+    'galerie_directory_details' => array(
+      '#weight' => 2,
+      '#type' => 'fieldset',
+      '#title' => t('Directory details'),
+
+      'galerie_directory' => array(
+        '#type' => 'textfield',
+        '#title' => t('Path'),
+        '#description' => t('Path to the directory that will be displayed in this gallery.'),
+        '#default_value' => isset($node->galerie_directory) ? $node->galerie_directory : variable_get('file_public_path', conf_path() . '/files'),
+        '#required' => TRUE,
+      ),
+      'galerie_recursive' => array(
+        '#type' => 'checkbox',
+        '#title' => t('Recursive'),
+        '#description' => t('If this box is checked, all images in sub-directories will be displayed.'),
+        '#default_value' => isset($node->galerie_recursive) ? $node->galerie_recursive : FALSE,
+      ),
+    ),
+  );
+
+  if (!$node->nid) {
+    $form['galerie_create_directory'] = array(
+      '#weight' => 1,
+      '#type' => 'checkbox',
+      '#title' => t('Create a new directory'),
+      '#description' => t('If checked, an empty directory will automatically be created for this gallery, otherwise you will have to choose a directory to use.'),
+      '#default_value' => TRUE,
+    );
+
+    $form['galerie_directory_details']['#attributes'] = array('style' => 'display: none');
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function galerie_directory_load($nodes) {
+  $result = db_query('SELECT nid, directory, recursive FROM {galerie_directory} WHERE nid IN (:nids)', array(':nids' => array_keys($nodes)));
+  foreach ($result as $record) {
+    $nodes[$record->nid]->galerie_directory = $record->directory;
+    $nodes[$record->nid]->galerie_recursive = $record->recursive;
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function galerie_directory_node_insert($node) {
+  if ($node->type == 'galerie' and $node->galerie_type == 'directory') {
+    if ($node->galerie_create_directory) {
+      $node->galerie_directory = variable_get('file_public_path', conf_path() . '/files') . '/galerie-' . $node->nid;
+
+      for ($try = 1 ; file_exists($node->galerie_directory) ; $try++) {
+        // just in case it already exists
+        $node->galerie_directory = variable_get('file_public_path', conf_path() . '/files') . '/galerie-' . $node->nid . '-' . $try;
+      }
+
+      if (drupal_mkdir($node->galerie_directory)) {
+        drupal_set_message(t('A new directory was created for this gallery: !directory.', array('!directory' => $node->galerie_directory)), 'status');
+      } else {
+        drupal_set_message(t('A new directory (!directory) could not be created for this gallery, you may have to create it yourself.', array('!directory' => $node->galerie_directory)), 'error');
+      }
+
+      $node->galerie_recursive = TRUE;
+    }
+
+    db_insert('galerie_directory')
+      ->fields(array(
+        'nid' => $node->nid,
+        'directory' => $node->galerie_directory,
+        'recursive' => $node->galerie_recursive,
+      ))
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function galerie_directory_node_update($node) {
+  if ($node->type == 'galerie' and $node->galerie_type == 'directory') {
+    db_update('galerie_directory')
+      ->fields(array(
+        'nid' => $node->nid,
+        'directory' => $node->galerie_directory,
+        'recursive' => $node->galerie_recursive,
+      ))
+      ->condition('nid', $node->nid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function galerie_directory_node_delete($node) {
+  if ($node->type == 'galerie' and $node->galerie_type == 'directory') {
+    db_delete('galerie_directory')
+      ->condition('nid', $node->nid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_galerie_image().
+ */
+function galerie_directory_galerie_image($node, $image_id) {
+  $file = _galerie_directory_image_path($node, $image_id);
+  return _galerie_directory_image_info($node, $file);
+}
+
+/**
+ * Implements hook_galerie_list().
+ */
+function galerie_directory_galerie_list($node, $offset, $count) {
+  $images = array();
+
+  if (!file_exists($node->galerie_directory) or !is_dir($node->galerie_directory)) {
+    drupal_set_message(t('The directory for this galerie (!directory) does not exist.', array('!directory' => $node->galerie_directory)), 'error');
+    return array();
+  }
+
+  $files = _galerie_directory_scandir($node->galerie_directory, $node->galerie_recursive);
+  foreach ($files as $n => $file) {
+    if ($n < $offset) {
+      continue;
+    } else if ($n >= $count + $offset) {
+      break;
+    }
+
+    if ($image = _galerie_directory_image_info($node, $file)) {
+      $image['thumb-src'] = _galerie_directory_thumbnail_src($node, $image['src']);
+      $images[] = $image;
+    }
+  }
+
+  return $images;
+}
+
+/**
+ * Turns a filepath into a human-readable title.
+ */
+function _galerie_directory_image_path_to_title($path) {
+  setlocale(LC_ALL, 'en_US.UTF8');
+  $title = preg_replace('/\.[a-z]+$/', '', basename($path));
+  $title = strtr($title, array(
+    '_' => ' ',
+  ));
+  return check_plain($title);
+}
+
+/**
+ * Returns a plain alphanumeric unique id for an image based on its path
+ * @param $path The path to the image.
+ * @return A string id from which the path can be guessed.
+ *
+ * Since we are trying to do a simple module that relies the least possible
+ * on the database, we will simply use base64 encoding so that the id keeps
+ * the whole path information.
+ */
+function _galerie_directory_image_id($node, $path) {
+  $path = str_replace($node->galerie_directory, '', $path);
+  return str_replace('/', '|', base64_encode($path));
+}
+
+/**
+ * Returns the path of an image from its id
+ */
+function _galerie_directory_image_path($node, $id) {
+  return $node->galerie_directory . base64_decode(str_replace('|', '/', $id));
+}
+
+/**
+ * Returns an array defining the image information of a file.
+ */
+function _galerie_directory_image_info($node, $file) {
+  $id = _galerie_directory_image_id($node, $file);
+
+  $actions = array();
+
+  if (node_access('update', $node)) {
+    $actions += array(
+      l(t('edit'), 'node/' . $node->nid . '/edit/' . $id),
+      l(t('delete'), 'node/' . $node->nid . '/delete/' . $id),
+    );
+  }
+
+  $info = array(
+    'title' => _galerie_directory_image_path_to_title($file),
+    'src' => url($file),
+    'description' => "",
+    'date' => filemtime($file),
+    'id' => $id,
+    'link' => url($file),
+    'extra' => '',
+    'actions' => $actions,
+  );
+
+  return $info;
+}
+
+/**
+ * Returns the thumbnails directory.
+ */
+function _galerie_directory_thumbnails_directory_base() {
+  $directory = variable_get('file_public_path', conf_path() . '/files').'/galerie-directory';
+  if (!file_exists($directory)) {
+    drupal_mkdir($directory, 0777, TRUE);
+  }
+  return $directory;
+}
+
+/**
+ * Returns the thumbnails directory to use for an image.
+ */
+function _galerie_directory_thumbnails_directory($node, $image_id) {
+  $directory = _galerie_directory_thumbnails_directory_base().'/'.$node->nid;
+  if (!file_exists($directory)) {
+    drupal_mkdir($directory, 0777, TRUE);
+  }
+  return $directory;
+}
+
+/**
+ * Returns the thumbnail of an image.
+ */
+function galerie_directory_thumbnail($node, $image_id) {
+  $thumbnail_path = _galerie_directory_thumbnails_directory($node, $image_id).'/'.$image_id;
+
+  $image_path = getcwd() . '/' . urldecode(_galerie_directory_image_path($node, $image_id));
+
+  if (!file_exists($thumbnail_path) or filemtime($thumbnail_path) < filemtime($image_path)) {
+    copy($image_path, $thumbnail_path);
+    $image_object = image_load($thumbnail_path);
+    image_scale_and_crop($image_object, 75, 75);
+    image_save($image_object, $thumbnail_path);
+  }
+
+  header('Content-Length: ' . filesize($thumbnail_path));
+  header('Content-Type: ' . $image_object['info']['mime_type']);
+  readfile($thumbnail_path);
+  exit();
+}
+
+/**
+ * Returns the thumbnail src of an image. This will be either  a physical file
+ * if it already exists, or a menu entry that will generate it if it does not.
+ */
+function _galerie_directory_thumbnail_src($node, $src) {
+  $image_id = _galerie_directory_image_id($node, $src);
+  $file = getcwd() . '/' . _galerie_directory_thumbnails_directory($node, $src).'/'.$image_id;
+
+  if (!file_exists($file) or filemtime($file) < filemtime(getcwd() . '/' . urldecode($src))) {
+    return url('galerie/directory/thumbnail/'.$node->nid.'/'.$image_id);
+  } else {
+    return url(_galerie_directory_thumbnails_directory($node, $src).'/'.$image_id);
+  }
+}
+
+/**
+ * Returns a list of files in a directory, recursively or not.
+ */
+function _galerie_directory_scandir($dir, $recursive = FALSE) {
+  $files = array_keys(file_scan_directory($dir, ':\.(jpg|gif|png)$:i', array('recurse' => $recursive)));
+  natsort($files);
+  return array_values($files);
+}
+
+/**
+ * Implements hook_menu().
+ */
+function galerie_directory_menu() {
+  return array(
+    'galerie/directory/thumbnail/%galerie_directory_menu/%' => array(
+      'type' => MENU_CALLBACK,
+      'page callback' => 'galerie_directory_thumbnail',
+      'page arguments' => array(3, 4),
+      'access arguments' => array('access content'),
+    ),
+    'node/%galerie_directory_menu/upload' => array(
+      'type' => MENU_LOCAL_TASK,
+      'title' => 'Upload',
+      'page callback' => 'galerie_directory_upload',
+      'page arguments' => array(1),
+      'access callback' => 'node_access',
+      'access arguments' => array('update', 1),
+    ),
+    'node/%galerie_directory_menu/edit/%' => array(
+      'type' => MENU_CALLBACK,
+      'title' => 'Edit image',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('galerie_directory_edit_image', 1, 3),
+      'access callback' => 'node_access',
+      'access arguments' => array('update', 1),
+    ),
+    'node/%galerie_directory_menu/delete/%' => array(
+      'type' => MENU_CALLBACK,
+      'title' => 'Delete image',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('galerie_directory_delete_image', 1, 3),
+      'access callback' => 'node_access',
+      'access arguments' => array('update', 1),
+    ),
+  );
+}
+
+/**
+ * Page for deleting an image
+ */
+function galerie_directory_delete_image($form, $form_state, $node, $image_id) {
+  $breadcrumb = drupal_get_breadcrumb();
+  $breadcrumb[] = l($node->title, 'node/' . $node->nid);
+  drupal_set_breadcrumb($breadcrumb);
+
+  $image = galerie_directory_galerie_image($node, $image_id);
+
+  return array(
+    'node' => array(
+      '#type' => 'value',
+      '#value' => $node,
+    ),
+    'image_id' => array(
+      '#type' => 'value',
+      '#value' => $image_id,
+    ),
+
+    'confirm' => array(
+      '#markup' => '<p>' . t('Are you sure you want to delete this image, %title?', array('%title' => $image['title'])) . '</p>',
+    ),
+
+    'submit' => array(
+      '#type' => 'submit',
+      '#title' => t('Delete'),
+      '#value' => t('Delete'),
+    ),
+
+    '#submit' => array('galerie_directory_delete_image_submit'),
+  );
+}
+
+/**
+ * Deletes an image from disk.
+ */
+function galerie_directory_delete_image_submit($form, $form_state) {
+  $node = $form['node']['#value'];
+  $image_id = $form['image_id']['#value'];
+
+  $path = _galerie_directory_image_path($node, $image_id);
+
+  if (!file_unmanaged_delete($path)) {
+    drupal_set_message(t('The image could not be deleted.'), 'error');
+  } else {
+    drupal_set_message(t('The image was successfuly deleted.'));
+  }
+
+  drupal_goto('node/' . $node->nid);
+}
+
+/**
+ * Page for editing an image
+ */
+function galerie_directory_edit_image($form, $form_state, $node, $image_id) {
+  $breadcrumb = drupal_get_breadcrumb();
+  $breadcrumb[] = l($node->title, 'node/' . $node->nid);
+  drupal_set_breadcrumb($breadcrumb);
+
+  $image = galerie_directory_galerie_image($node, $image_id);
+
+  return array(
+    'node' => array(
+      '#type' => 'value',
+      '#value' => $node,
+    ),
+    'image_id' => array(
+      '#type' => 'value',
+      '#value' => $image_id,
+    ),
+
+    'fieldset' => array(
+      '#type' => 'fieldset',
+      '#title' => t('Edit an image: !title', array('!title' => $image['title'])),
+
+      'title' => array(
+        '#type' => 'textfield',
+        '#title' => t('Title'),
+        '#default_value' => $image['title'],
+        '#required' => TRUE,
+      ),
+
+      'submit' => array(
+        '#type' => 'submit',
+        '#title' => t('Save'),
+        '#value' => t('Save'),
+      ),
+    ),
+
+    '#validate' => array('galerie_directory_edit_image_validate'),
+    '#submit' => array('galerie_directory_edit_image_submit'),
+  );
+}
+
+/**
+ * Validates input for image edit form.
+ */
+function galerie_directory_edit_image_validate($form, $form_state) {
+}
+
+/**
+ * Saves the new title of an image (renaming it).
+ */
+function galerie_directory_edit_image_submit($form, $form_state) {
+  $node = $form['node']['#value'];
+  $image_id = $form['image_id']['#value'];
+
+  $path = _galerie_directory_image_path($node, $image_id);
+
+  $extension = preg_replace('/.*\.([a-z]*)$/', '\1', $path);
+  $new_title = $form['fieldset']['title']['#value'];
+  $new_path = trim($new_title);
+  $new_path = strtr($new_path, array(
+    '/' => '-',
+    ' ' => '_',
+  ));
+  $new_path = preg_replace('/\p{C}/u', '', $new_path);
+  $new_path = $node->galerie_directory . '/' . $new_path . '.' . $extension;
+  $new_path = file_build_uri($new_path);
+
+  if (!file_unmanaged_move($path, $new_path)) {
+    drupal_set_message(t('The image could not be renamed.'), 'error');
+  } else {
+    drupal_set_message(t('The image was successfuly renamed.'));
+  }
+
+  $new_id = _galerie_directory_image_id($node, $new_path);
+
+  drupal_goto('node/' . $node->nid, array('fragment' => $new_id));
+}
+
+/**
+ * Implements hook_load() for wildcards.
+ * I do not really feel like digging further into this but this usage of
+ * wildcards seems to collide with hook_load() taking and return arrays.
+ */
+function galerie_directory_menu_load($nid) {
+  if ($node = node_load($nid) and $node->type == 'galerie' and $node->galerie_type == 'directory') {
+    return $node;
+  } else {
+    return NULL;
+  }
+}
+
+/**
+ * Page for adding an image to a gallery.
+ */
+function galerie_directory_upload($node) {
+  return drupal_get_form('galerie_directory_upload_form', $node);
+}
+
+/**
+ * Form for adding an image to a gallery.
+ */
+function galerie_directory_upload_form($form, $form_state, $node) {
+  $form = array(
+    'title' => array(
+      '#type' => 'textfield',
+      '#title' => t('Title'),
+      '#required' => TRUE,
+    ),
+
+    'from-disk' => array(
+      '#type' => 'fieldset',
+      '#title' => t('Upload from your computer'),
+      '#description' => t('Use this method to add an image which resides on your computer.'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+
+      'galerie-file-upload' => array(
+        '#type' => 'file',
+        '#title' => t('File'),
+        '#description' => t('Choose the image to add to this gallery.'),
+      ),
+    ),
+
+    'from-url' => array(
+      '#type' => 'fieldset',
+      '#title' => t('Download from external website'),
+      '#description' => t('Using this method, an image will be downloaded from an external website and added to the gallery.'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+
+      'galerie-file-url' => array(
+        '#type' => 'textfield',
+        '#title' => t('URL'),
+        '#description' => t('Enter the URL of the image.'),
+      ),
+    ),
+
+    'galerie' => array(
+      '#type' => 'value',
+      '#value' => $node,
+    ),
+
+    '#attributes' => array('enctype' => "multipart/form-data"),
+
+    'submit' => array(
+      '#type' => 'submit',
+      '#value' => t('Upload'),
+    ),
+
+    '#validate' => array('galerie_directory_upload_form_validate'),
+    '#submit' => array('galerie_directory_upload_form_submit'),
+  );
+
+  return $form;
+}
+
+/**
+ * Validates form input.
+ */
+function galerie_directory_upload_form_validate($form, &$form_state) {
+  if (empty($form_state['values']['galerie-file-url'])) {
+    if (!$file = file_save_upload('galerie-file-upload')) {
+      form_set_error('galerie-file-upload', t('You must at least select a file or specify a URL.'));
+    } else {
+      $errors = file_validate_is_image($file);
+
+      if (count($errors)) foreach ($errors as $error) {
+        form_set_error('galerie-file-upload', $error);
+      }
+    }
+  } else {
+    if (!valid_url($form_state['values']['galerie-file-url'], TRUE)) {
+      form_set_error('galerie-file-url', t('This does not look like a URL: !url', array('!url' => $form_state['values']['galerie-file-url'])));
+    }
+  }
+}
+
+/**
+ * Add images to a gallery.
+ */
+function galerie_directory_upload_form_submit($form, $form_state) {
+  $title = trim($form_state['values']['title']);
+  $title = strtr($title, array(
+    '/' => '-',
+    ' ' => '_',
+  ));
+  $title = preg_replace('/\p{C}/u', '', $title);
+
+  $node = $form_state['values']['galerie'];
+
+  $file = NULL;
+
+  if (!empty($form_state['values']['galerie-file-url'])) {
+    $result = drupal_http_request($form_state['values']['galerie-file-url']);
+
+    if (isset($result->error) and $result->error) {
+      drupal_set_message(t($result->error), 'error');
+    } else {
+      $file = file_save_data($result->data);
+
+      if (!$file) {
+        drupal_set_message(t('The image from !url could not be saved.', array('!url' => $form_state['values']['galerie-file-url'])), 'error');
+      }
+    }
+  }
+
+  if (!$file) {
+    $file = file_save_upload('galerie-file-upload');
+  }
+
+  if ($file) {
+    $errors = file_validate_is_image($file);
+
+    if (count($errors)) foreach ($errors as $error) {
+      form_set_error('galerie-file-upload', $error);
+    } else {
+      $mimetypes = file_mimetype_mapping();
+
+      if (isset($mimetypes['mimetypes'][$file->filemime])) {
+        $typeid = $mimetypes['mimetypes'][$file->filemime];
+        $extension = $mimetypes['extensions'][$typeid];
+      } else {
+        // that's a safe bet
+        $extension = 'jpg';
+      }
+
+      $destination = file_build_uri($node->galerie_directory . '/' . $title . '.' . $extension);
+
+      if (!file_move($file, $destination)) {
+        drupal_set_message(t('The image could not be saved.'), 'error');
+      } else {
+        $title = _galerie_directory_image_path_to_title($destination);
+
+        drupal_set_message(t('The image, !title, was successfully saved.', array('!title' => $title)), 'status');
+      }
+    }
+  } else {
+    drupal_set_message(t('The image could not be saved.'), 'error');
+  }
+}
+

@@ -1,0 +1,43 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the galerie module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function galerie_directory_schema() {
+  return array(
+    'galerie_directory' => array(
+      'description' => 'The table for directory-based galeries.',
+      'fields' => array(
+        'nid' => array(
+          'description' => 'The nid of the galerie node.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+        'directory' => array(
+          'description' => 'The path to the directory that should be displayed as a galerie.',
+          'type' => 'varchar',
+          'length' => 255,
+          'not null' => TRUE,
+          'default' => '',
+        ),
+        'recursive' => array(
+          'description' => 'Whether sub-directories should be displayed or not.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => '0',
+        ),
+      ),
+      'primary key' => array('nid'),
+      'foreign keys' => array('galerie' => 'nid'),
+    ),
+  );
+}
+

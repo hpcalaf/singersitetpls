@@ -1,0 +1,178 @@
+<?php
+
+/**
+ * @file
+ * The core module that manages all common galerie operations
+ */
+
+/**
+ * Implements hook_galerie_types().
+ */
+function galerie_tumblr_galerie_types() {
+  return array(
+    'tumblr' => array(
+      'title' => t('Tumblr'),
+      'description' => t('A gallery with the photo posts of a Tumblr user.'),
+      'module' => 'galerie_tumblr',
+    ),
+  );
+}
+
+/**
+ * Implements hook_galerie_form().
+ */
+function galerie_tumblr_galerie_form($node, $form_state) {
+  return array(
+    'galerie_tumblr_details' => array(
+      '#weight' => 2,
+      '#type' => 'fieldset',
+      '#title' => t('Tumblr details'),
+
+      'galerie_user' => array(
+        '#type' => 'textfield',
+        '#title' => t('User'),
+        '#description' => t('Username of the Tumblr user'),
+        '#default_value' => isset($node->galerie_user) ? $node->galerie_user : '',
+        '#maxlength' => 32,
+        '#required' => TRUE,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function galerie_tumblr_load($nodes) {
+  $result = db_query('SELECT nid, user FROM {galerie_tumblr} WHERE nid IN (:nids)', array(':nids' => array_keys($nodes)));
+  foreach ($result as $record) {
+    $nodes[$record->nid]->galerie_user = $record->user;
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function galerie_tumblr_node_insert($node) {
+  if ($node->type == 'galerie') switch ($node->galerie_type) {
+    case 'tumblr':
+      db_insert('galerie_tumblr')
+        ->fields(array(
+          'nid' => $node->nid,
+          'user' => $node->galerie_user,
+        ))
+        ->execute();
+      break;
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function galerie_tumblr_node_update($node) {
+  if ($node->type == 'galerie') switch ($node->galerie_type) {
+    case 'tumblr':
+      db_update('galerie_tumblr')
+        ->fields(array(
+          'nid' => $node->nid,
+          'user' => $node->galerie_user,
+        ))
+        ->condition('nid', $node->nid)
+        ->execute();
+      break;
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function galerie_tumblr_node_delete($node) {
+  if ($node->type == 'galerie') switch ($node->galerie_type) {
+    case 'tumblr':
+      db_delete('galerie_tumblr')
+        ->condition('nid', $node->nid)
+        ->execute();
+      break;
+  }
+}
+
+/**
+ * Implements hook_galerie_list().
+ */
+function galerie_tumblr_galerie_list($node, $offset, $count) {
+  $images = array();
+
+  $url  = 'http://' . urlencode($node->galerie_user) . '.tumblr.com/api/read/json?';
+  $url .= '&start='  . $offset;
+  $url .= '&num='    . max($count, 50);
+  $url .= '&type='   . 'photo';
+  $url .= '&filter=' . 'html';
+
+  $result = drupal_http_request($url);
+
+  if (isset($result->error) and $result->error) {
+    drupal_set_message(t('Cannot retrieve images from Tumblr: !error', array('!error' => $result->error)), 'error');
+    return array();
+  }
+
+  $data = preg_replace('/.+?({.+}).+/','$1',$result->data);
+  if (!$data = json_decode($data)) {
+    drupal_set_message(t('Cannot retrieve images from Tumblr'), 'error');
+    return array();
+  }
+
+  foreach ($data->posts as $post) {
+    $images[] = _galerie_tumblr_post_to_image($post);
+  }
+
+  return $images;
+}
+
+/**
+ * Implements hook_galerie_image().
+ */
+function galerie_tumblr_galerie_image($node, $image_id) {
+  $url  = 'http://' . urlencode($node->galerie_user) . '.tumblr.com/api/read/json?';
+  $url .= '&id='  . $image_id;
+
+  $result = drupal_http_request($url);
+
+  if (isset($result->error) and $result->error) {
+    drupal_set_message(t('Cannot retrieve image from Flickr: !error', array('!error' => $result->error)), 'error');
+    return array();
+  }
+
+  $data = preg_replace('/.+?({.+}).+/','$1',$result->data);
+  if (!$data = json_decode($data)) {
+    drupal_set_message(t('Cannot retrieve images from Tumblr'), 'error');
+    return array();
+  }
+
+  return _galerie_tumblr_post_to_image($data->posts[0]);
+}
+
+/**
+ * Returns the image info for a Tumblr post
+ */
+function _galerie_tumblr_post_to_image($post) {
+  return array(
+    'title' => '',
+    'src' => $post->{'photo-url-500'},
+    'description' => $post->{'photo-caption'},
+    'date' => strtotime($post->{'date-gmt'}),
+    'id' => $post->{'id'},
+    'link' => $post->{'url-with-slug'},
+    'thumb-src' => $post->{'photo-url-75'},
+  );
+}
+
+/**
+ * Implements hook_node_view().
+ * Let's add our CSS to make Tumblr's output prettier
+ */
+function galerie_tumblr_node_view($node) {
+  if ($node->type == 'galerie' and $node->galerie_type == 'tumblr') {
+    drupal_add_css(drupal_get_path('module', 'galerie_tumblr') . '/galerie_tumblr.css');
+  }
+}
+

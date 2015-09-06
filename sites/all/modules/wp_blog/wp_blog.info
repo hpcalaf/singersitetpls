@@ -1,0 +1,13 @@
+; $Id: wp_blog.info,v 1.1 2011/02/13 22:01:18 manarth Exp $
+name = WP Blog
+description = Provides a content-type, views and various features to mimic a WordPress-style blog.
+core = 7.x
+dependencies[] = taxonomy
+dependencies[] = views
+
+; Information added by drupal.org packaging script on 2011-02-18
+version = "7.x-1.0"
+core = "7.x"
+project = "wp_blog"
+datestamp = "1298056936"
+

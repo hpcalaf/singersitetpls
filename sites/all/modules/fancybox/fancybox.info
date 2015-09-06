@@ -1,0 +1,16 @@
+; $Id: fancybox.info,v 1.3.2.1 2010/07/08 13:45:25 sbacelic Exp $
+name = Fancybox
+description = Provides the Fancybox jQuery plugin for displaying images, HTML content and multimedia in an elegant box.
+core = 7.x
+package = User interface
+
+files[] = fancybox.install
+files[] = fancybox.module
+files[] = fancybox.admin.inc
+files[] = fancybox.theme.inc
+; Information added by drupal.org packaging script on 2010-09-02
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "fancybox"
+datestamp = "1283386113"
+
