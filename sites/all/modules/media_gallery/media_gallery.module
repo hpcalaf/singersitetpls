@@ -314,7 +314,11 @@ function media_gallery_view($node, $view_mode) {
 
     // Enable the "Add media" link to launch the media browser.
     module_load_include('inc', 'media', 'includes/media.browser');
-    media_attach_browser_js($node->content['add_media_link']);
+    // media_attach_browser_js($node->content['add_media_link']);
+
+    drupal_add_library('media', 'media_browser');
+    drupal_add_library('media', 'media_browser_settings');
+
     $node->content['add_media_link']['#attached']['js'][] = drupal_get_path('module', 'media_gallery') . '/media_gallery.addimage.js';
 
     // These JS settings are used by the "add media" link but some are also
