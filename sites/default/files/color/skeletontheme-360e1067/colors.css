@@ -1,0 +1,18 @@
+body { color:#161616; }
+
+a:link, a:visited { color:#b52c2c; }
+
+a:hover, a:active, a:focus { color:#b52c38; }
+
+h1, h2, h3, h4, h5, h6 { color:#536682; }
+
+#header #site-name a { color:#536682; }
+
+#header #site-name a:hover { color: #536682; }
+
+#header #site-slogan { color: #161616; }
+
+body { border-color:#de6846; }
+
+#wrap { border-color:#d9964b; }
+

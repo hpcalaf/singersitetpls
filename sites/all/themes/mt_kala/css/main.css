@@ -9,3 +9,8 @@
 tbody {
   border-top: 0px;
 }
+
+.navbar-brand {
+  height: inherit;
+  padding-top: 10px;
+}
